@@ -6,17 +6,17 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"text/template"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/google/uuid"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 func ExecuteCode(executionGroupID string, imageName string, files map[string]File, tests []Test, configurations Configuration) error {
-	boundary := uuid.New().String()
+	boundary := GenerateBoundary()
 
 	if len(tests) == 0 {
 		stdout, stderr, err := RunCodeInContainer(executionGroupID, imageName, files, nil, boundary)
@@ -26,6 +26,7 @@ func ExecuteCode(executionGroupID string, imageName string, files map[string]Fil
 
 		fmt.Println("Stdout: ", stdout)
 		fmt.Println("Stderr: ", stderr)
+		return nil
 	}
 
 	for _, test := range tests {
@@ -186,4 +187,14 @@ func CreateTarArchiveFromJSON(files map[string]File, test *Test, boundary string
 	}
 
 	return io.NopCloser(bytes.NewReader(buffer.Bytes())), nil
+}
+
+func GenerateBoundary() string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	length := 32
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(b)
 }
