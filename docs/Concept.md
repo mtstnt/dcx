@@ -11,13 +11,14 @@ Example:
         "main.py": {
             "encoding": "utf-8",
             "content": "a = input()\nprint(a)"
-        },
-        "requirements.txt": {
-            "encoding": "utf-8",
-            "content": "requests"
         }
     },
     "Language": "python",
+    "Configurations": {
+        "Strictness": "strict",
+        "Timeout": 10,
+        "MemoryLimit": 1024
+    },
     "Tests": [
         {
             "input": "Hello, World!",
