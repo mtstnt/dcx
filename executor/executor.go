@@ -6,14 +6,52 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"text/template"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/google/uuid"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-func ExecuteCode(executionGroupID string, imageName string, files map[string]File, tests []Test, configurations Configuration) (string, string, error) {
+func ExecuteCode(executionGroupID string, imageName string, files map[string]File, tests []Test, configurations Configuration) error {
+	boundary := uuid.New().String()
+
+	if len(tests) == 0 {
+		stdout, stderr, err := RunCodeInContainer(executionGroupID, imageName, files, nil, boundary)
+		if err != nil {
+			return fmt.Errorf("failed to run code in container: %v", err)
+		}
+
+		fmt.Println("Stdout: ", stdout)
+		fmt.Println("Stderr: ", stderr)
+	}
+
+	for _, test := range tests {
+		stdout, stderr, err := RunCodeInContainer(executionGroupID, imageName, files, &test, boundary)
+		if err != nil {
+			return fmt.Errorf("failed to run code in container: %v", err)
+		}
+
+		fmt.Println("Raw Stdout: ", stdout)
+		fmt.Println("Raw Stderr: ", stderr)
+
+		// Split stdout by boundary and get the middle section (the actual output)
+		parts := bytes.Split([]byte(stdout), []byte(boundary))
+		var cleanedOutput string
+		if len(parts) >= 3 {
+			cleanedOutput = string(bytes.TrimSpace(parts[1]))
+		}
+
+		fmt.Println("Expected: ", test.Output)
+		fmt.Println("Actual: ", cleanedOutput)
+	}
+
+	return nil
+}
+
+func RunCodeInContainer(executionGroupID string, imageName string, files map[string]File, test *Test, boundary string) (string, string, error) {
 	if !HasImageInstalled(context.Background(), imageName) {
 		return "", "", fmt.Errorf("image %s not found", imageName)
 	}
@@ -45,7 +83,7 @@ func ExecuteCode(executionGroupID string, imageName string, files map[string]Fil
 
 	containerID := containerCreateResponse.ID
 
-	tarArchive, err := CreateTarArchiveFromJSON(files)
+	tarArchive, err := CreateTarArchiveFromJSON(files, test, boundary)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create tar archive: %v", err)
 	}
@@ -98,7 +136,7 @@ func ExecuteCode(executionGroupID string, imageName string, files map[string]Fil
 
 // CreateTarArchiveFromJSON creates a TAR archive from a JSON representation of files
 // and returns it as an io.ReadCloser for use with Docker's CopyToContainer
-func CreateTarArchiveFromJSON(files map[string]File) (io.ReadCloser, error) {
+func CreateTarArchiveFromJSON(files map[string]File, test *Test, boundary string) (io.ReadCloser, error) {
 	// Create a new TAR writer
 	var buffer bytes.Buffer
 	{
@@ -110,6 +148,22 @@ func CreateTarArchiveFromJSON(files map[string]File) (io.ReadCloser, error) {
 
 		// Write the files to the TAR archive in a separate goroutine
 		for filename, file := range files {
+
+			if filename == "runner.sh" && test != nil {
+				tmpl, err := template.New("runner.sh").Parse(file.Content)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse runner.sh: %v", err)
+				}
+
+				var buf bytes.Buffer
+				tmpl.Execute(&buf, map[string]interface{}{
+					"Input":    test.Input,
+					"Boundary": boundary,
+				})
+
+				file.Content = buf.String()
+			}
+
 			// Create a header for the file
 			header := &tar.Header{
 				Name: baseDir + filename,

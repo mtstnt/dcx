@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -39,13 +40,8 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// http.HandleFunc("/submit", handleSubmit)
-
-	// client, err := client.NewClientWithOpts(client.WithHost("host.docker.internal:2375"), client.WithAPIVersionNegotiation())
-	// if err != nil {
-	// 	log.Fatalf("Failed to create Docker client: %v", err)
-	// }
-	// Docker = client
+	sampleRun := flag.Bool("sample-run", false, "Run a sample code execution test")
+	flag.Parse()
 
 	client, err := client.NewClientWithOpts(client.WithHostFromEnv(), client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -53,36 +49,49 @@ func main() {
 	}
 	Docker = client
 
-	// // Initialize poller background function.
-	// go RunPollerLoop()
+	if *sampleRun {
+		fmt.Println("Running sample code execution test...")
+		err = ExecuteCode("123", "python:3.9.21-slim", map[string]File{
+			"main.py": {
+				Encoding: "utf-8",
+				Content: `
+a = input()
+print(a)
+`,
+			},
+			"runner.sh": {
+				Encoding: "utf-8",
+				Content: `#!/bin/sh
+input="{{ .Input }}"
+echo "{{ .Boundary }}"
+echo "$input" | python3 -u main.py
+echo "{{ .Boundary }}"
+echo "::Status Code:: $?"`,
+			},
+		}, []Test{
+			{
+				Input:  "Hello, World!",
+				Output: "Hello, World!",
+			},
+			{
+				Input:  "Heyyyyyy",
+				Output: "Heyyyyyy",
+			},
+		}, Configuration{})
+		fmt.Println("Error: ", err)
+		return
+	}
 
-	// port := ":8080"
-	// fmt.Printf("Starting executor service on port %s\n", port)
-	// if err := http.ListenAndServe(port, nil); err != nil {
-	// 	log.Fatalf("Failed to start server: %v", err)
-	// }
-	fmt.Println("Starting executor service")
-	stdout, stderr, err := ExecuteCode("123", "python:3.9.21-slim", map[string]File{
-		"main.py": {
-			Encoding: "utf-8",
-			Content:  `print("Hello world!", flush=True)`,
-		},
-		"runner.sh": {
-			Encoding: "utf-8",
-			Content: `#!/bin/sh
-echo "==== Running main.py ===="
-python3 -u main.py
-echo "==== Status Code: $?"`,
-		},
-	}, []Test{
-		// {
-		// 	Input:  "Hello, World!",
-		// 	Output: "Hello, World!",
-		// },
-	}, Configuration{})
-	fmt.Println("Stdout: ", stdout)
-	fmt.Println("Stderr: ", stderr)
-	fmt.Println("Error: ", err)
+	http.HandleFunc("/submit", handleSubmit)
+
+	// Initialize poller background function.
+	go RunPollerLoop()
+
+	port := ":8080"
+	fmt.Printf("Starting executor service on port %s\n", port)
+	if err := http.ListenAndServe(port, nil); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
 
 func RunPollerLoop() {

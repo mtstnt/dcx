@@ -2,8 +2,6 @@
 
 DCX consists of 2 parts, the orchestrator and the executor. 
 
-### Stage 1
-Generate a main file with basic HTTP routes using Chi framework to handle POST /session and GET /status/:session_id. 
 POST /session API is used to submit code for execution with request body: 
 Files stores the filesystem of the project, based from the root project directory.
 Example:
@@ -56,8 +54,6 @@ When done, the result is available in the response body:
 }
 ```
 
-### Stage 2
-In executor, generate a main file with HTTP endpoint to handle:
 POST /submit
 Request body:
 ```json
