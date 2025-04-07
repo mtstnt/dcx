@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "github.com/mtstnt/launch/protobufs";
+
+package protobufs;
+
+service WorkerService {
+    rpc Register(RegisterRequest) returns (RegisterResponse);
+}
+
+message RegisterRequest {
+  string worker_id = 1;
+}
+
+message RegisterResponse {
+    string message = 1;
+}
